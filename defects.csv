@@ -1,0 +1,3 @@
+date,machineName,defectType,severity,remarks
+14-10-2026,Machine-101,Weave Defect,Major,Valid imported inspection
+15-10-2026,Machine-102,Shade Variation,Minor,This future record must be skipped

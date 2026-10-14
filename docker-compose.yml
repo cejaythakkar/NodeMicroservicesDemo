@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quality_tracker
+      POSTGRES_USER: quality_user
+      POSTGRES_PASSWORD: quality_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init/01_pgcrypto.sql:/docker-entrypoint-initdb.d/01_pgcrypto.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quality_user -d quality_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth_service:
+    build:
+      context: ./auth_service
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://quality_user:quality_password@postgres:5432/quality_tracker
+      JWT_SECRET: local-development-secret
+      JWT_EXPIRES_IN: 1h
+      NODE_ENV: production
+      LOG_LEVEL: info
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  inspection_tracker_service:
+    build:
+      context: ./inspection_tracker_service
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://quality_user:quality_password@postgres:5432/quality_tracker
+      REDIS_URL: redis://redis:6379
+      AUTH_SERVICE_URL: http://auth_service:3001
+      NODE_ENV: production
+      LOG_LEVEL: info
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+
+  front_end:
+    build:
+      context: ./front-end
+    environment:
+      VITE_AUTH_API_URL: http://localhost:3001
+      VITE_INSPECTION_API_URL: http://localhost:3002
+    ports:
+      - "5173:5173"
+    depends_on:
+      auth_service:
+        condition: service_started
+      inspection_tracker_service:
+        condition: service_started
+
+volumes:
+  postgres_data:
